@@ -127,5 +127,7 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 .drop-asset time { justify-self:end; color:#71819c; font:11px/1.2 "Inter",ui-sans-serif,sans-serif; }
 .waiver-feed .trade-feed-status { color:#f4bd50; }.waiver-feed .trade-feed-moves { display:block; }.waiver-feed .waiver-drop-line { margin-top:7px; }.waiver-feed .waiver-drop-line>span { color:#f59ca3; }.waiver-feed .waiver-drop-line b { opacity:.72; text-decoration:line-through; }
 
+.now.draft-complete { background:linear-gradient(145deg,#141e32,#0f1728); }
+
 /* Configuração local */
 .configuration-section { margin-top:24px; }.studio-configuration { overflow:hidden; }.studio-config-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:16px; }.studio-config-grid label { display:grid; gap:6px; color:#aebbd0; font:800 11px/1 "Inter",ui-sans-serif,sans-serif; letter-spacing:.07em; text-transform:uppercase; }.studio-name-input { width:100%; border:1px solid #3b4d69; border-radius:8px; outline:0; background:#0e1829; color:#fff; padding:10px 11px; font:600 14px/1.35 "Poppins",ui-sans-serif,sans-serif; text-transform:none; letter-spacing:0; }.studio-name-input:focus { border-color:#3fbcf6; box-shadow:0 0 0 3px rgb(63 188 246 / 12%); }.studio-config-actions { padding:0 16px 16px; }.config-error { padding:0 16px 12px; color:#ff9ca6; font:700 13px/1.4 "Inter",ui-sans-serif,sans-serif; }@media (max-width:620px) { .studio-config-grid { grid-template-columns:1fr; } }
