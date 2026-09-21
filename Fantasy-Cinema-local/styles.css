@@ -118,8 +118,6 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 .trade-gain b { display:inline-block; padding:6px 9px; border:1px solid #2b405f; border-left:3px solid var(--position-color); border-radius:6px; background:#14233a; color:#edf4ff; }.scoring-grid .table-wrap { max-height:none; }
 
 /* Histórico imutável do draft e drops de waiver */
-.board-pick.draft-dropped b,.board-pick.draft-dropped small { text-decoration:line-through; opacity:.6; }
-.board-pick.draft-dropped { background:linear-gradient(135deg,rgb(255 42 65 / 11%),transparent); }
 .my-team-right-stack { display:grid; gap:16px; align-content:start; }
 .drops-card { overflow:hidden; }.drops-card .card-head { min-height:56px; }
 .drops-list { display:grid; gap:0; padding:4px 16px 10px; }
