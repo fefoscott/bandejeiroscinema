@@ -123,10 +123,10 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 .my-team-right-stack { display:grid; gap:16px; align-content:start; }
 .drops-card { overflow:hidden; }.drops-card .card-head { min-height:56px; }
 .drops-list { display:grid; gap:0; padding:4px 16px 10px; }
-.drop-asset { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:5px 12px; padding:12px 0 12px 10px; border-bottom:1px solid #24324c; border-left:3px solid var(--position-color); }
-.drop-asset:last-child { border-bottom:0; }.drop-asset s { color:#91a0b5; font:600 15px/1.25 "Poppins",ui-sans-serif,sans-serif; }
-.drop-replacement { display:flex; align-items:center; gap:7px; min-width:0; }.drop-replacement span { color:#00ceb8; font:400 22px/1 "Inter",ui-sans-serif,sans-serif; }.drop-replacement b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; font:600 15px/1.25 "Poppins",ui-sans-serif,sans-serif; }
-.drop-asset time { grid-column:1 / -1; color:#71819c; font:11px/1.2 "Inter",ui-sans-serif,sans-serif; }
+.drop-asset { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:7px 12px; padding:12px 0 12px 10px; border-bottom:1px solid #24324c; border-left:3px solid var(--position-color); }
+.drop-asset:last-child { border-bottom:0; }.drop-asset s { grid-column:1 / -1; color:#91a0b5; font:600 15px/1.25 "Poppins",ui-sans-serif,sans-serif; }
+.drop-replacement { display:flex; align-items:center; gap:6px; min-width:0; }.drop-replacement span { color:#00ceb8; font:600 15px/1.25 "Inter",ui-sans-serif,sans-serif; }.drop-replacement b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#91a0b5; font:600 15px/1.25 "Poppins",ui-sans-serif,sans-serif; }
+.drop-asset time { justify-self:end; color:#71819c; font:11px/1.2 "Inter",ui-sans-serif,sans-serif; }
 .waiver-feed .trade-feed-status { color:#f4bd50; }.waiver-feed .trade-feed-moves { display:block; }.waiver-feed .waiver-drop-line { margin-top:7px; }.waiver-feed .waiver-drop-line>span { color:#f59ca3; }.waiver-feed .waiver-drop-line b { opacity:.72; text-decoration:line-through; }
 
 /* Configuração local */
