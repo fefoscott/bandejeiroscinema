@@ -1,7 +1,7 @@
 const root = document.querySelector('#app');
 const state = { view: 'draft', filter: 'Filme', assetFilter: 'Filme', assetMode: 'available', picks: [], data: null, controller: 'Cine Clube', viewedTeam: 'Cine Clube', search: '', assetSearch: '', trades: [], tradeDraft: null, bids: [], bidDraft: null, configError: '', draftSync: 'connecting', draftError: '', draftNeedsPublish: false, draftSaving: false, tradeSync: 'connecting', tradeError: '', tradeSaving: false, waiverSync: 'connecting', waiverError: '', bidSaving: false };
 const labels = { Filme: 'Filmes', Ator: 'Atores', Diretor: 'Diretores', Distribuidora: 'Distribuidoras' };
-const API_URL = 'https://script.google.com/macros/s/AKfycby4EXH5JmUNsVkP42WbA1mwibK1eB8HlIrcivF5zNLV01w6Vevl0PRVIov5WhiR3SU/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzwyM9O__UFlIJE9lBEI-XuZW5uAchhsuoJ9kuxCBaZ8G_NIrURU9e7qjqMj3NSDmKv/exec';
 const LIVE_SHEETS = ['Cadastro', 'Simulador', 'Ranking Filmes', 'Ranking Distribuidoras', 'Ranking Diretores', 'Ranking Atores', 'Configuração'];
 const DRAFT_STORAGE_KEY = 'bandejeiros-cinema-draft-2025';
 const TRADE_STORAGE_KEY = 'bandejeiros-cinema-trades-2025';
@@ -110,7 +110,7 @@ function restoreLocalLeagueState() {
 function sharedDraftPicks(picks) {
   return (picks || []).map(pick => {
     const item = (state.data.pools[pick.position] || []).find(asset => asset.name === pick.asset);
-    return { number: Number(pick.number), round: Number(pick.round), team: pick.team, position: pick.position, asset: pick.asset, score: item?.score || 0, createdAt: pick.createdAt || '' };
+    return { number: Number(pick.number), round: Number(pick.round), team: pick.team, position: pick.position, asset: pick.asset, originalAsset: pick.originalAsset || pick.asset, score: item?.score || 0, createdAt: pick.createdAt || '' };
   }).filter(pick => pick.number && pick.team && pick.position && pick.asset).sort((a, b) => a.number - b.number);
 }
 function sharedDraftChanged(next) {
@@ -187,7 +187,7 @@ function tableRecords(table) {
   return (table?.rows || []).map(row => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
 }
 function sharedBids(table) {
-  return tableRecords(table).filter(row => row.LANCE_ID && (row.STATUS === 'ATIVO' || !row.STATUS)).map(row => ({
+  return tableRecords(table).filter(row => row.LANCE_ID).map(row => ({
     id: row.LANCE_ID,
     roundId: row.RODADA_ID || 'TESTE-2025',
     createdAt: row.ENVIADO_EM || '',
@@ -198,7 +198,9 @@ function sharedBids(table) {
     priority: Number(row.PRIORIDADE) || 1,
     drop: { number: Number(row.DROP_PICK), position: row.DROP_CATEGORIA, asset: row.DROP_ATIVO },
     dropDestination: clean(row.DESTINO_DROP) === 'banco' ? 'bank' : 'waiver',
-    status: row.STATUS || 'ATIVO'
+    status: row.STATUS || 'ATIVO',
+    result: row.RESULTADO || '',
+    processedAt: row.PROCESSADO_EM || ''
   }));
 }
 function sharedBidsChanged(next) { return JSON.stringify(state.bids.map(bid => [bid.id, bid.amount, bid.status])) !== JSON.stringify(next.map(bid => [bid.id, bid.amount, bid.status])); }
@@ -393,7 +395,7 @@ function isAvailable(position, item) { return item.score===0 && owner(position,i
 function assetBids(position, name) { return state.bids.filter(bid=>bid.position===position && bid.asset===name).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)); }
 function currentBid(position, name, studio) { return assetBids(position,name).filter(bid=>bid.studio===studio).reduce((highest,bid)=>Math.max(highest,bid.amount),0); }
 function winningBid(position, name) { const bids=assetBids(position,name); if (!bids.length) return null; return [...bids].sort((a,b)=>b.amount-a.amount || state.data.teams.indexOf(a.studio)-state.data.teams.indexOf(b.studio) || a.createdAt.localeCompare(b.createdAt))[0]; }
-function committedFAAB(studio) { const amounts=new Map(); state.bids.filter(bid=>bid.studio===studio).forEach(bid=>{const key=`${bid.position}::${bid.asset}`; amounts.set(key,Math.max(amounts.get(key)||0,bid.amount));}); return [...amounts.values()].reduce((sum,amount)=>sum+amount,0); }
+function committedFAAB(studio) { const settled=state.bids.filter(bid=>bid.studio===studio&&bid.status==='VENCEU').reduce((sum,bid)=>sum+bid.amount,0); const amounts=new Map(); state.bids.filter(bid=>bid.studio===studio&&bid.status==='ATIVO').forEach(bid=>{const key=`${bid.position}::${bid.asset}`; amounts.set(key,Math.max(amounts.get(key)||0,bid.amount));}); return settled+[...amounts.values()].reduce((sum,amount)=>sum+amount,0); }
 function availableFAAB(studio) { return SEASON_FAAB-committedFAAB(studio); }
 function startBid(position, name) { const item=(state.data.pools[position]||[]).find(asset=>asset.name===name); if (!item || !isAvailable(position,item)) return; state.bidDraft={position,name}; render(); }
 function cancelBid() { state.bidDraft=null; render(); }
@@ -487,8 +489,9 @@ function header(title, text) { const control = state.view==='draft' ? `<span cla
 function assetContext(a) { if (state.filter === 'Filme') return `${a.distributor} · ${a.director}`; if (state.filter === 'Distribuidora') return a.topFilms.join(' · '); return relatedFilms(state.filter,a.name).slice(0,2).map(item=>item.name).join(' · ') || 'Sem filme associado'; }
 function rosterLabel(position) { return position==='Distribuidora' ? 'Distribuidora' : labels[position]; }
 function teamViewer() { const team = state.viewedTeam; const r = roster(team); return `<div class="card personal-roster"><div class="card-head studio-viewer-head"><select class="team-view-select" id="viewed-team" aria-label="Escolher estúdio para visualizar">${state.data.teams.map(item=>`<option value="${item}" ${item===team?'selected':''}>${item}</option>`).join('')}</select><strong class="points">${fmt(total(team))}</strong></div><div class="personal-list">${Object.keys(labels).map(pos=>`<div class="personal-group ${posClass(pos)}"><div class="roster-label">${rosterLabel(pos)} · ${r[pos].length}/${state.data.roster[pos]}</div>${r[pos].map(p=>`<div class="roster-item"><span>${p.asset}</span><strong>${fmt(p.score)}</strong></div>`).join('') || '<span class="count">vaga vazia</span>'}</div>`).join('')}</div></div>`; }
-function boardDetail(pick) { if (pick.position==='Filme') { const item=state.data.pools.Filme.find(entry=>entry.name===pick.asset); return item ? `${item.director} · ${item.distributor}` : ''; } if (pick.position==='Distribuidora') { const count=state.data.pools.Filme.filter(item=>item.distributor===pick.asset).length; return `${count} ${count===1?'filme':'filmes'}`; } return relatedFilms(pick.position,pick.asset).map(item=>item.name).join(' · '); }
-function draftBoard() { return `<section class="draft-board card"><div class="board-label"><strong>Quadro de escolhas</strong><span>Snake draft</span></div><div class="board-scroll"><div class="board-grid">${state.data.teams.map((team,teamIndex)=>`<article class="board-team ${team===state.controller?'controlled':''}"><header><span class="team-dot"></span><b>${team}</b></header>${Array.from({length:10},(_,index)=>{const round=index+1; const slot=round%2 ? teamIndex+1 : 8-teamIndex; const pick=state.picks.find(item=>item.number===(round-1)*8+slot); const code=`${round}.${String(slot).padStart(2,'0')}`; return `<div class="board-pick ${pick?posClass(pick.position):'empty-pick'}">${pick?`<b>${pick.asset}</b><small>${boardDetail(pick)}</small>`:''}<span class="board-number">${code}</span></div>`;}).join('')}</article>`).join('')}</div></div></section>`; }
+function draftAsset(pick) { return pick.originalAsset || pick.asset; }
+function boardDetail(pick) { const drafted=draftAsset(pick); if (pick.position==='Filme') { const item=state.data.pools.Filme.find(entry=>entry.name===drafted); return item ? `${item.director} · ${item.distributor}` : ''; } if (pick.position==='Distribuidora') { const count=state.data.pools.Filme.filter(item=>item.distributor===drafted).length; return `${count} ${count===1?'filme':'filmes'}`; } return relatedFilms(pick.position,drafted).map(item=>item.name).join(' · '); }
+function draftBoard() { return `<section class="draft-board card"><div class="board-label"><strong>Quadro de escolhas</strong><span>Snake draft</span></div><div class="board-scroll"><div class="board-grid">${state.data.teams.map((team,teamIndex)=>`<article class="board-team ${team===state.controller?'controlled':''}"><header><span class="team-dot"></span><b>${team}</b></header>${Array.from({length:10},(_,index)=>{const round=index+1; const slot=round%2 ? teamIndex+1 : 8-teamIndex; const pick=state.picks.find(item=>item.number===(round-1)*8+slot); const code=`${round}.${String(slot).padStart(2,'0')}`; const dropped=pick&&draftAsset(pick)!==pick.asset; return `<div class="board-pick ${pick?posClass(pick.position):'empty-pick'} ${dropped?'draft-dropped':''}">${pick?`<b>${draftAsset(pick)}</b><small>${boardDetail(pick)}</small>`:''}<span class="board-number">${code}</span></div>`;}).join('')}</article>`).join('')}</div></div></section>`; }
 function draft() {
   const next = currentPick(); const done = state.picks.length >= 80; const mine = !done && next.team === state.controller; const distance = picksUntilController();
   const pool = (state.data.pools[state.filter] || []).filter(item => !isUsed(state.filter, item.name));
@@ -522,11 +525,14 @@ function tradeFeed(trade) {
   return `<article class="trade-feed ${trade.status}"><div class="trade-feed-status"><svg class="trade-feed-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h9.2l-2.6-2.6L15 3l5 5-5 5-1.4-1.4L16.2 9H7a3 3 0 0 0-3 3H2a5 5 0 0 1 5-5Z"/><path d="M17 17H7.8l2.6 2.6L9 21l-5-5 5-5 1.4 1.4L7.8 15H17a3 3 0 0 0 3-3h2a5 5 0 0 1-5 5Z"/></svg><b>${tradeStatusLabel(trade.status)}</b></div><div class="trade-feed-moves">${tradeTransferGroups(trade).map(group=>`<section class="trade-feed-group"><p>para <b>${group.to}</b> de ${group.from}</p>${group.assets.map(asset=>`<div class="trade-gain ${posClass(asset.position)}"><span>+</span><b>${asset.asset}</b></div>`).join('')}</section>`).join('')}</div><time>${tradeDate(trade.createdAt)}</time>${reply?`<div class="actions trade-feed-actions"><button class="button counter-offer" data-counter-trade="${trade.id}" ${state.tradeSaving?'disabled':''}>Contra-proposta</button><button class="button accept-offer" data-answer-trade="${trade.id}" data-answer="accept" ${state.tradeSaving?'disabled':''}>Aceitar</button><button class="button danger" data-answer-trade="${trade.id}" data-answer="reject" ${state.tradeSaving?'disabled':''}>Recusar</button></div>`:''}</article>`;
 }
 function tradeDesk() { const active=state.trades.filter(trade=>trade.status==='offered'); if (!active.length) return ''; return `<section class="card trade-desk"><div class="card-head"><div><h2>Propostas ativas</h2><span class="count">Responda às recebidas ou acompanhe as enviadas.</span></div></div><div class="trade-feed-list">${active.map(trade=>tradeFeed(trade)).join('')}</div></section>`; }
+function waiverFeed(bid) { const date=bid.processedAt||bid.createdAt; return `<article class="trade-feed waiver-feed"><div class="trade-feed-status"><b>Waiver</b></div><div class="trade-feed-moves"><section class="trade-feed-group"><p>para <b>${bid.studio}</b> · ${bid.amount} FAAB</p><div class="trade-gain ${posClass(bid.position)}"><span>+</span><b>${bid.asset}</b></div></section><section class="trade-feed-group waiver-drop-line"><p>dropado</p><div class="trade-gain ${posClass(bid.drop.position)}"><span>−</span><b>${bid.drop.asset}</b></div></section></div><time>${tradeDate(date)}</time></article>`; }
 function counterTrade(id) { const trade=state.trades.find(item=>item.id===id); if (!trade) return; state.tradeDraft={teams:tradeParticipants(trade),selections:[]}; render(); }
 function transactions() {
   const trades=[...state.trades].sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
   const history=trades.filter(trade=>trade.status!=='offered');
-  return `${header('Transações', '')}${state.tradeError?`<p class="config-error">${state.tradeError}</p>`:''}${tradeDesk()}${tradeBuilder()}<section class="card transactions-card"><div class="card-head"><div><h2>Histórico</h2><span class="count">${trades.filter(trade=>trade.status==='pendingCommissioner').length} pendente(s) do Comissário</span></div></div><div class="trade-feed-list">${history.map(trade=>`${tradeFeed(trade)}${trade.status==='pendingCommissioner'?`<div class="actions commissioner-actions"><button class="button primary" data-resolve-trade="${trade.id}" data-resolution="approve" ${state.tradeSaving?'disabled':''}>Aprovar</button><button class="button danger" data-resolve-trade="${trade.id}" data-resolution="veto" ${state.tradeSaving?'disabled':''}>Vetar</button></div>`:''}`).join('')||'<p class="empty">Nenhuma transação concluída, recusada ou vetada.</p>'}</div></section>`;
+  const waivers=state.bids.filter(bid=>bid.status==='VENCEU');
+  const historyItems=[...history.map(trade=>({date:trade.createdAt,html:`${tradeFeed(trade)}${trade.status==='pendingCommissioner'?`<div class="actions commissioner-actions"><button class="button primary" data-resolve-trade="${trade.id}" data-resolution="approve" ${state.tradeSaving?'disabled':''}>Aprovar</button><button class="button danger" data-resolve-trade="${trade.id}" data-resolution="veto" ${state.tradeSaving?'disabled':''}>Vetar</button></div>`:''}`})),...waivers.map(bid=>({date:bid.processedAt||bid.createdAt,html:waiverFeed(bid)}))].sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  return `${header('Transações', '')}${state.tradeError?`<p class="config-error">${state.tradeError}</p>`:''}${tradeDesk()}${tradeBuilder()}<section class="card transactions-card"><div class="card-head"><div><h2>Histórico</h2><span class="count">${trades.filter(trade=>trade.status==='pendingCommissioner').length} pendente(s) do Comissário</span></div></div><div class="trade-feed-list">${historyItems.map(item=>item.html).join('')||'<p class="empty">Nenhuma transação concluída, recusada, vetada ou waiver processada.</p>'}</div></section>`;
 }
 function myTeam() {
   const team = state.controller;
@@ -534,8 +540,11 @@ function myTeam() {
   const picks = state.picks.filter(pick => pick.team === team).sort((a, b) => order[a.position] - order[b.position] || a.asset.localeCompare(b.asset, 'pt-BR'));
   const scoring = picks.filter(pick => pick.score !== 0);
   const pending = picks.filter(pick => pick.score === 0);
-  return `${header('Meu Estúdio', '')}<section class="grid my-team-layout"><article class="card my-team-card"><div class="card-head"><div><h2>Já estrearam</h2><span class="count">Pontuação em andamento</span></div><strong class="points">${fmt(scoring.reduce((sum, pick) => sum + pick.score, 0))}</strong></div><div class="my-team-assets">${scoring.map(myTeamAsset).join('') || '<p class="empty">Nenhum ativo deste estúdio começou a pontuar.</p>'}</div></article><article class="card my-team-card"><div class="card-head"><div><h2>Ainda vão estrear</h2><span class="count">Negociáveis</span></div></div><div class="my-team-assets">${pending.map(myTeamAsset).join('') || '<p class="empty">Todos os ativos já têm pontuação registrada.</p>'}</div></article></section>`;
+  const drops = state.bids.filter(bid => bid.studio===team && bid.status==='VENCEU').sort((a,b)=>String(b.processedAt||b.createdAt).localeCompare(String(a.processedAt||a.createdAt)));
+  return `${header('Meu Estúdio', '')}<section class="grid my-team-layout"><article class="card my-team-card"><div class="card-head"><div><h2>Já estrearam</h2><span class="count">Pontuação em andamento</span></div><strong class="points">${fmt(scoring.reduce((sum, pick) => sum + pick.score, 0))}</strong></div><div class="my-team-assets">${scoring.map(myTeamAsset).join('') || '<p class="empty">Nenhum ativo deste estúdio começou a pontuar.</p>'}</div></article><article class="card my-team-card"><div class="card-head"><div><h2>Ainda vão estrear</h2><span class="count">Negociáveis</span></div></div><div class="my-team-assets">${pending.map(myTeamAsset).join('') || '<p class="empty">Todos os ativos já têm pontuação registrada.</p>'}</div><div class="drops-section"><h3>Drops</h3><div class="drops-list">${drops.map(waiverDropCard).join('') || '<p class="empty">Nenhum drop realizado.</p>'}</div></div></article></section>`;
 }
+
+function waiverDropCard(bid) { return `<div class="drop-asset ${posClass(bid.drop.position)}"><span>${rosterLabel(bid.drop.position)}</span><s>${bid.drop.asset}</s><small>Drop concluído · ${bid.amount} FAAB</small></div>`; }
 
 function metricCell(value, points) { return `<div class="metric-cell"><b>${value}</b><small>${fmt(points)} FPTS</small></div>`; }
 function awardLines(items) { return items.length ? items.map(line=>`<span>${line}</span>`).join('') : '<span>Sem indicações</span>'; }

@@ -117,5 +117,18 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 /* Cartões de ativos em transações */
 .trade-gain b { display:inline-block; padding:6px 9px; border:1px solid #2b405f; border-left:3px solid var(--position-color); border-radius:6px; background:#14233a; color:#edf4ff; }.scoring-grid .table-wrap { max-height:none; }
 
+/* Histórico imutável do draft e drops de waiver */
+.board-pick.draft-dropped b,.board-pick.draft-dropped small { text-decoration:line-through; opacity:.6; }
+.board-pick.draft-dropped { background:linear-gradient(135deg,rgb(255 42 65 / 11%),transparent); }
+.drops-section { border-top:1px solid var(--line); padding:14px 16px 16px; }
+.drops-section h3 { margin:0 0 9px; color:#aebbd0; font:800 11px/1 "Inter",ui-sans-serif,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.drops-list { display:grid; gap:7px; }
+.drop-asset { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:6px 9px; padding:9px 10px; border:1px solid #2b405f; border-left:3px solid var(--position-color); border-radius:7px; background:#101a2b; }
+.drop-asset>span { color:var(--position-color); font:800 10px/1 "Inter",ui-sans-serif,sans-serif; letter-spacing:.07em; text-transform:uppercase; }
+.drop-asset s { color:#91a0b5; font:600 14px/1.25 "Poppins",ui-sans-serif,sans-serif; }
+.drop-asset small { grid-column:1 / -1; color:#71819c; font:11px/1.2 "Inter",ui-sans-serif,sans-serif; }
+.waiver-feed .trade-feed-status { color:#f4bd50; }.waiver-feed .trade-feed-moves { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }.waiver-feed .waiver-drop-line { border-left:1px solid #2a3a55; padding-left:18px; }.waiver-feed .waiver-drop-line .trade-gain>span { color:#f59ca3; }.waiver-feed .waiver-drop-line .trade-gain b { opacity:.72; text-decoration:line-through; }
+@media (max-width:720px) { .waiver-feed .trade-feed-moves { grid-template-columns:1fr; gap:8px; }.waiver-feed .waiver-drop-line { border-left:0; border-top:1px solid #2a3a55; padding:8px 0 0; } }
+
 /* Configuração local */
 .configuration-section { margin-top:24px; }.studio-configuration { overflow:hidden; }.studio-config-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:16px; }.studio-config-grid label { display:grid; gap:6px; color:#aebbd0; font:800 11px/1 "Inter",ui-sans-serif,sans-serif; letter-spacing:.07em; text-transform:uppercase; }.studio-name-input { width:100%; border:1px solid #3b4d69; border-radius:8px; outline:0; background:#0e1829; color:#fff; padding:10px 11px; font:600 14px/1.35 "Poppins",ui-sans-serif,sans-serif; text-transform:none; letter-spacing:0; }.studio-name-input:focus { border-color:#3fbcf6; box-shadow:0 0 0 3px rgb(63 188 246 / 12%); }.studio-config-actions { padding:0 16px 16px; }.config-error { padding:0 16px 12px; color:#ff9ca6; font:700 13px/1.4 "Inter",ui-sans-serif,sans-serif; }@media (max-width:620px) { .studio-config-grid { grid-template-columns:1fr; } }
