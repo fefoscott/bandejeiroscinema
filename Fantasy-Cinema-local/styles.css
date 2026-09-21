@@ -129,5 +129,14 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 
 .now.draft-complete { background:linear-gradient(145deg,#141e32,#0f1728); }
 
+/* Estreias e orçamento na classificação */
+.standings-header { grid-template-columns:54px minmax(190px,1fr) 56px minmax(185px,.85fr) 92px; }
+.standing-row { grid-template-columns:54px minmax(190px,1fr) 56px minmax(185px,.85fr) 92px; }
+.standing-faab { color:#c7d1e0; font:700 15px/1 "Poppins",ui-sans-serif,sans-serif; font-variant-numeric:tabular-nums; }
+.film-asset-table td:nth-child(2) { min-width:112px; color:#b8c5d7; white-space:nowrap; }
+.film-asset-table td:nth-child(3) { min-width:126px; color:#b8c5d7; white-space:nowrap; }
+.film-asset-table td:nth-child(4) { min-width:86px; max-width:none; white-space:nowrap; }
+@media (max-width:760px) { .standing-row { grid-template-columns:40px minmax(0,1fr) auto; }.standing-row .standing-faab { grid-column:3; grid-row:1; }.standing-row .pending-summary { grid-column:2 / 4; grid-row:2; }.standing-row>.points { grid-column:3; grid-row:3; } }
+
 /* Configuração local */
 .configuration-section { margin-top:24px; }.studio-configuration { overflow:hidden; }.studio-config-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; padding:16px; }.studio-config-grid label { display:grid; gap:6px; color:#aebbd0; font:800 11px/1 "Inter",ui-sans-serif,sans-serif; letter-spacing:.07em; text-transform:uppercase; }.studio-name-input { width:100%; border:1px solid #3b4d69; border-radius:8px; outline:0; background:#0e1829; color:#fff; padding:10px 11px; font:600 14px/1.35 "Poppins",ui-sans-serif,sans-serif; text-transform:none; letter-spacing:0; }.studio-name-input:focus { border-color:#3fbcf6; box-shadow:0 0 0 3px rgb(63 188 246 / 12%); }.studio-config-actions { padding:0 16px 16px; }.config-error { padding:0 16px 12px; color:#ff9ca6; font:700 13px/1.4 "Inter",ui-sans-serif,sans-serif; }@media (max-width:620px) { .studio-config-grid { grid-template-columns:1fr; } }
