@@ -1,5 +1,5 @@
 const root = document.querySelector('#app');
-const state = { view: 'draft', filter: 'Filme', assetFilter: 'Filme', assetMode: 'available', picks: [], data: null, controller: 'Cine Clube', viewedTeam: 'Cine Clube', search: '', assetSearch: '', trades: [], tradeDraft: null, bids: [], bidDraft: null, configError: '', draftSync: 'connecting', draftError: '', draftNeedsPublish: false, draftSaving: false, tradeSync: 'connecting', tradeError: '', tradeSaving: false };
+const state = { view: 'draft', filter: 'Filme', assetFilter: 'Filme', assetMode: 'available', picks: [], data: null, controller: 'Cine Clube', viewedTeam: 'Cine Clube', search: '', assetSearch: '', trades: [], tradeDraft: null, bids: [], bidDraft: null, configError: '', draftSync: 'connecting', draftError: '', draftNeedsPublish: false, draftSaving: false, tradeSync: 'connecting', tradeError: '', tradeSaving: false, waiverSync: 'connecting', waiverError: '', bidSaving: false };
 const labels = { Filme: 'Filmes', Ator: 'Atores', Diretor: 'Diretores', Distribuidora: 'Distribuidoras' };
 const API_URL = 'https://script.google.com/macros/s/AKfycby4EXH5JmUNsVkP42WbA1mwibK1eB8HlIrcivF5zNLV01w6Vevl0PRVIov5WhiR3SU/exec';
 const LIVE_SHEETS = ['Cadastro', 'Simulador', 'Ranking Filmes', 'Ranking Distribuidoras', 'Ranking Diretores', 'Ranking Atores', 'Configuração'];
@@ -11,6 +11,7 @@ const SEASON_FAAB = 100;
 const DRAFT_POLL_MS = 3000;
 let draftPollTimer = null;
 let tradePollTimer = null;
+let waiverPollTimer = null;
 
 function savedDraft() {
   try {
@@ -181,6 +182,55 @@ async function postTrade(action, body) {
   if (Array.isArray(payload.trades) && Array.isArray(payload.assets)) applySharedTrades(payload.trades, payload.assets);
   return payload;
 }
+function tableRecords(table) {
+  const headers = table?.headers || [];
+  return (table?.rows || []).map(row => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+}
+function sharedBids(table) {
+  return tableRecords(table).filter(row => row.LANCE_ID && (row.STATUS === 'ATIVO' || !row.STATUS)).map(row => ({
+    id: row.LANCE_ID,
+    roundId: row.RODADA_ID || 'TESTE-2025',
+    createdAt: row.ENVIADO_EM || '',
+    studio: row.ESTÚDIO,
+    position: row.CATEGORIA,
+    asset: row.ATIVO,
+    amount: Number(row.VALOR_FAAB) || 0,
+    priority: Number(row.PRIORIDADE) || 1,
+    drop: { number: Number(row.DROP_PICK), position: row.DROP_CATEGORIA, asset: row.DROP_ATIVO },
+    dropDestination: clean(row.DESTINO_DROP) === 'banco' ? 'bank' : 'waiver',
+    status: row.STATUS || 'ATIVO'
+  }));
+}
+function sharedBidsChanged(next) { return JSON.stringify(state.bids.map(bid => [bid.id, bid.amount, bid.status])) !== JSON.stringify(next.map(bid => [bid.id, bid.amount, bid.status])); }
+function applySharedWaiver(payload) {
+  const next = sharedBids(payload.bids);
+  const changed = sharedBidsChanged(next) || state.waiverSync !== 'shared' || Boolean(state.waiverError);
+  state.bids = next;
+  state.waiverSync = 'shared';
+  state.waiverError = '';
+  return changed;
+}
+async function refreshSharedWaiver() {
+  try {
+    const response = await fetch(`${API_URL}?view=waiver`, { cache: 'no-store' });
+    const payload = await response.json();
+    if (!payload.ok || !payload.bids) throw new Error(payload.error || 'Resposta inválida da Waiver');
+    if (applySharedWaiver(payload)) render();
+  } catch (error) {
+    if (state.waiverSync !== 'error') {
+      state.waiverSync = 'error';
+      state.waiverError = 'Não foi possível sincronizar os lances compartilhados.';
+      render();
+    }
+  }
+}
+async function postWaiverBid(body) {
+  const response = await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action:'waiverBid', ...body }) });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || 'Não foi possível registrar o lance.');
+  applySharedWaiver(payload);
+  return payload;
+}
 async function refreshSharedDraft() {
   try {
     const response = await fetch(`${API_URL}?view=draft`, { cache: 'no-store' });
@@ -276,8 +326,10 @@ async function loadLeague() {
   render();
   refreshSharedDraft();
   refreshSharedTrades();
+  refreshSharedWaiver();
   if (!draftPollTimer) draftPollTimer = setInterval(refreshSharedDraft, DRAFT_POLL_MS);
   if (!tradePollTimer) tradePollTimer = setInterval(refreshSharedTrades, DRAFT_POLL_MS);
+  if (!waiverPollTimer) waiverPollTimer = setInterval(refreshSharedWaiver, DRAFT_POLL_MS);
   try {
     const url = `${API_URL}?sheet=${encodeURIComponent(LIVE_SHEETS.join(','))}`;
     const live = await fetch(url, { cache: 'no-store' }).then(response => response.json());
@@ -345,7 +397,21 @@ function committedFAAB(studio) { const amounts=new Map(); state.bids.filter(bid=
 function availableFAAB(studio) { return SEASON_FAAB-committedFAAB(studio); }
 function startBid(position, name) { const item=(state.data.pools[position]||[]).find(asset=>asset.name===name); if (!item || !isAvailable(position,item)) return; state.bidDraft={position,name}; render(); }
 function cancelBid() { state.bidDraft=null; render(); }
-function submitBid(amount, dropNumber) { const draft=state.bidDraft; const value=Number(amount); const drop=state.picks.find(pick=>pick.number===Number(dropNumber)); if (!draft || !Number.isInteger(value) || value<1 || !drop || drop.team!==state.controller || drop.position!==draft.position) return; const current=winningBid(draft.position,draft.name); const own=currentBid(draft.position,draft.name,state.controller); const replacing=own; if (value<=Math.max(current?.amount||0,own)) return; if (committedFAAB(state.controller)-replacing+value>SEASON_FAAB) return; state.bids.push({id:`${Date.now()}-bid`,position:draft.position,asset:draft.name,studio:state.controller,amount:value,drop:assetRef(drop),dropDestination:drop.score!==0?'bank':'waiver',createdAt:new Date().toISOString()}); state.bidDraft=null; saveBids(); render(); }
+async function submitBid(amount, dropNumber) {
+  const draft=state.bidDraft; const value=Number(amount); const drop=state.picks.find(pick=>pick.number===Number(dropNumber));
+  if (!draft || state.bidSaving || !Number.isInteger(value) || value<1 || !drop || drop.team!==state.controller || drop.position!==draft.position) return;
+  const current=winningBid(draft.position,draft.name); const own=currentBid(draft.position,draft.name,state.controller); const replacing=own;
+  if (value<=Math.max(current?.amount||0,own) || committedFAAB(state.controller)-replacing+value>SEASON_FAAB) return;
+  state.bidSaving=true; state.waiverError=''; render();
+  try {
+    await postWaiverBid({ studio:state.controller, category:draft.position, asset:draft.name, amount:value, priority:1, dropPick:drop.number, dropCategory:drop.position, dropAsset:drop.asset, dropDestination:drop.score!==0?'BANCO':'WAIVER' });
+    state.bidDraft=null;
+  } catch (error) {
+    state.waiverError=error.message || 'Não foi possível registrar o lance.';
+  } finally {
+    state.bidSaving=false; render();
+  }
+}
 function renameStudioReferences(rename) { const name=value=>rename[value]||value; state.picks.forEach(pick=>{pick.team=name(pick.team);}); state.bids.forEach(bid=>{bid.studio=name(bid.studio);}); state.trades.forEach(trade=>{trade.initiator=name(trade.initiator); trade.fromStudio=name(trade.fromStudio); trade.toStudio=name(trade.toStudio); if(trade.participants) trade.participants=trade.participants.map(name); if(trade.transfers) trade.transfers.forEach(transfer=>{transfer.from=name(transfer.from);transfer.to=name(transfer.to);}); if(trade.acceptances){const next={};Object.entries(trade.acceptances).forEach(([team,status])=>{next[name(team)]=status;});trade.acceptances=next;} }); }
 function saveStudioConfiguration(values) { const next=values.map(value=>value.trim()).filter(Boolean); if(next.length!==state.data.teams.length || new Set(next.map(clean)).size!==next.length){state.configError='Use oito nomes diferentes para os estúdios.';render();return;} const previous=[...state.data.teams]; const rename=Object.fromEntries(previous.map((team,index)=>[team,next[index]])); renameStudioReferences(rename); state.data.teams=next; state.controller=rename[state.controller]||state.controller; state.viewedTeam=rename[state.viewedTeam]||state.viewedTeam; state.configError=''; saveDraft(); saveBids(); saveTrades(); saveTeamNames(); render(); }
 function assetRef(pick) { return { number: pick.number, position: pick.position, asset: pick.asset, score: pick.score }; }
@@ -487,9 +553,9 @@ function applyAssetSearch(query) { root.querySelectorAll('.asset-table tbody tr'
 function sortableValue(value) { const text=value.replace(/\s+/g,' ').trim(); const digits=text.replace(/[^\d,.-]/g,''); if (/^-?[\d.,]+$/.test(digits) && /\d/.test(digits)) { const comma=digits.lastIndexOf(','); const dot=digits.lastIndexOf('.'); return comma>dot ? Number(digits.replace(/\./g,'').replace(',','.')) : Number(digits.replace(/,/g,'')); } return clean(text); }
 function sortAssetColumn(button) { const index=Number(button.dataset.sortColumn); const table=button.closest('table'); const body=table.querySelector('tbody'); const direction=button.dataset.direction==='asc'?'desc':'asc'; [...table.querySelectorAll('.table-sort')].forEach(item=>{item.dataset.direction=''; item.querySelector('span').textContent='↕';}); button.dataset.direction=direction; button.querySelector('span').textContent=direction==='asc'?'↑':'↓'; const rows=[...body.rows].sort((a,b)=>{const first=sortableValue(a.cells[index].textContent);const second=sortableValue(b.cells[index].textContent);const comparison=typeof first==='number'&&typeof second==='number'?first-second:String(first).localeCompare(String(second),'pt-BR',{numeric:true});return direction==='asc'?comparison:-comparison;}); rows.forEach(row=>body.appendChild(row)); }
 function bidHistory(position,name) { const bids=assetBids(position,name); return bids.length ? bids.map(bid=>`${bid.studio} ${bid.amount}`).join(' · ') : 'Sem lances'; }
-function bidModal() { const draft=state.bidDraft; if (!draft) return ''; const current=winningBid(draft.position,draft.name); const minimum=(current?.amount||0)+1; const drops=state.picks.filter(pick=>pick.team===state.controller&&pick.position===draft.position).sort((a,b)=>a.asset.localeCompare(b.asset,'pt-BR')); const dropOptions=drops.map(drop=>`<option value="${drop.number}">${drop.asset} — ${drop.score!==0?'Banco (já pontuou)':'Waiver (ainda sem pontuação)'}</option>`).join(''); return `<div class="modal-backdrop"><section class="bid-modal" role="dialog" aria-modal="true" aria-labelledby="bid-title"><h2 id="bid-title">Confirmar lance</h2><p>Você está prestes a dar um lance em <b>${draft.name}</b>.</p><label for="bid-amount">Lance FAAB</label><input id="bid-amount" type="number" min="${minimum}" max="${availableFAAB(state.controller)+currentBid(draft.position,draft.name,state.controller)}" value="${minimum}" autofocus />${drops.length?`<label for="bid-drop">Drop obrigatório · ${rosterLabel(draft.position)}</label><select id="bid-drop">${dropOptions}</select><small>Se o lance vencer: ativo que já pontuou vai para o <b>Banco</b>; ativo sem pontuação volta para a <b>Waiver</b>. Se não vencer, nenhum ativo é adicionado ou dropado.</small>`:'<small class="bid-error">Você não possui um ativo dessa categoria para dropar.</small>'}<small>Seu lance será visível para toda a liga e não poderá ser cancelado. FAAB disponível para compromissos: <b>${availableFAAB(state.controller)}</b> / ${SEASON_FAAB}.</small><div class="actions"><button class="button" data-cancel-bid>Voltar</button><button class="button accept-offer" data-confirm-bid ${drops.length?'':'disabled'}>Confirmar lance</button></div></section></div>`; }
+function bidModal() { const draft=state.bidDraft; if (!draft) return ''; const current=winningBid(draft.position,draft.name); const minimum=(current?.amount||0)+1; const drops=state.picks.filter(pick=>pick.team===state.controller&&pick.position===draft.position).sort((a,b)=>a.asset.localeCompare(b.asset,'pt-BR')); const dropOptions=drops.map(drop=>`<option value="${drop.number}">${drop.asset} — ${drop.score!==0?'Banco (já pontuou)':'Waiver (ainda sem pontuação)'}</option>`).join(''); return `<div class="modal-backdrop"><section class="bid-modal" role="dialog" aria-modal="true" aria-labelledby="bid-title"><h2 id="bid-title">Confirmar lance</h2><p>Você está prestes a dar um lance em <b>${draft.name}</b>.</p><label for="bid-amount">Lance FAAB</label><input id="bid-amount" type="number" min="${minimum}" max="${availableFAAB(state.controller)+currentBid(draft.position,draft.name,state.controller)}" value="${minimum}" autofocus ${state.bidSaving?'disabled':''} />${drops.length?`<label for="bid-drop">Drop obrigatório · ${rosterLabel(draft.position)}</label><select id="bid-drop" ${state.bidSaving?'disabled':''}>${dropOptions}</select><small>Se o lance vencer: ativo que já pontuou vai para o <b>Banco</b>; ativo sem pontuação volta para a <b>Waiver</b>. Se não vencer, nenhum ativo é adicionado ou dropado.</small>`:'<small class="bid-error">Você não possui um ativo dessa categoria para dropar.</small>'}<small>Seu lance será visível para toda a liga e não poderá ser cancelado. FAAB disponível para compromissos: <b>${availableFAAB(state.controller)}</b> / ${SEASON_FAAB}.</small>${state.waiverError?`<p class="config-error">${state.waiverError}</p>`:''}<div class="actions"><button class="button" data-cancel-bid ${state.bidSaving?'disabled':''}>Voltar</button><button class="button accept-offer" data-confirm-bid ${drops.length&&!state.bidSaving?'':'disabled'}>${state.bidSaving?'Registrando...':'Confirmar lance'}</button></div></section></div>`; }
 function availableRows(position) { return (state.data.pools[position]||[]).filter(item=>isAvailable(position,item)).map(item=>{const leader=winningBid(position,item.name);return [`<button class="add-icon" data-start-bid-asset="${item.name}" data-start-bid-position="${position}" title="Adicionar ${item.name}" aria-label="Adicionar ${item.name}">+</button>`,item.name,leader?`${leader.amount} FAAB`:'—',leader?leader.studio:'Sem lances',bidHistory(position,item.name)];}); }
-function assets() { const position=state.assetFilter; const mode=state.assetMode; const available=mode==='available'; const rows=available?availableRows(position):assetRows(position,item=>!isAvailable(position,item)); const headers=available?['',labels[position],'Maior lance','Líder','Histórico de lances']:position==='Filme'?['Filmes','Estúdio','FPTS','Nota Letterboxd','Bilheteria','Crítica','Premiações']:position==='Distribuidora'?['Distribuidoras','Estúdio','FPTS','Filme 1','Filme 2','Filme 3']:[labels[position],'Estúdio','FPTS','Filmes elegíveis','Nota Letterboxd','Bilheteria','Crítica','Premiações']; return `${header('Ativos', '')}<div class="tabs asset-mode-tabs"><button class="tab ${available?'active':''}" data-asset-mode="available">Disponíveis</button><button class="tab ${!available?'active':''}" data-asset-mode="leaders">Líderes</button></div><div class="tabs asset-tabs">${Object.keys(labels).map(key=>`<button class="tab ${posClass(key)} ${position===key?'active':''}" data-asset-filter="${key}">${labels[key]}</button>`).join('')}</div><div class="search-wrap asset-search"><label for="asset-table-search">Buscar ${labels[position].toLowerCase()}</label><input id="asset-table-search" type="search" value="${state.assetSearch}" placeholder="Digite um nome" /></div>${table(headers,rows,available?'asset-table available-table':'asset-table',true,available?1:0)}${bidModal()}`; }
+function assets() { const position=state.assetFilter; const mode=state.assetMode; const available=mode==='available'; const rows=available?availableRows(position):assetRows(position,item=>!isAvailable(position,item)); const headers=available?['',labels[position],'Maior lance','Líder','Histórico de lances']:position==='Filme'?['Filmes','Estúdio','FPTS','Nota Letterboxd','Bilheteria','Crítica','Premiações']:position==='Distribuidora'?['Distribuidoras','Estúdio','FPTS','Filme 1','Filme 2','Filme 3']:[labels[position],'Estúdio','FPTS','Filmes elegíveis','Nota Letterboxd','Bilheteria','Crítica','Premiações']; return `${header('Ativos', '')}${state.waiverError&&!state.bidDraft?`<p class="config-error">${state.waiverError}</p>`:''}<div class="tabs asset-mode-tabs"><button class="tab ${available?'active':''}" data-asset-mode="available">Disponíveis</button><button class="tab ${!available?'active':''}" data-asset-mode="leaders">Líderes</button></div><div class="tabs asset-tabs">${Object.keys(labels).map(key=>`<button class="tab ${posClass(key)} ${position===key?'active':''}" data-asset-filter="${key}">${labels[key]}</button>`).join('')}</div><div class="search-wrap asset-search"><label for="asset-table-search">Buscar ${labels[position].toLowerCase()}</label><input id="asset-table-search" type="search" value="${state.assetSearch}" placeholder="Digite um nome" /></div>${table(headers,rows,available?'asset-table available-table':'asset-table',true,available?1:0)}${bidModal()}`; }
 function configValue(parameter) { return state.data.scoring.find(item=>item.parameter===parameter)?.value || '—'; }
 function scoring() { const publicMult=configValue('Multiplicador Letterboxd'), publicRef=configValue('Referência Letterboxd'), boxMult=configValue('Multiplicador global'); return `${header('Pontuação', '')}<section class="category-formula-grid"><article class="card category-formula pos-filme"><span>Filmes</span><strong>Público + Bilheteria + Crítica + Prêmios</strong><p>Bilheteria integral e peso maior para Melhor Filme.</p></article><article class="card category-formula pos-ator"><span>Atores</span><strong>Média dos filmes + Prêmios individuais</strong><p>Bilheteria com 50%; atuações têm o maior peso em prêmios.</p></article><article class="card category-formula pos-diretor"><span>Diretores</span><strong>Média dos filmes + Prêmios de direção</strong><p>Bilheteria com 50%; Melhor Filme e Direção pesam mais.</p></article><article class="card category-formula pos-distribuidora"><span>Distribuidoras</span><strong>Média dos 3 melhores filmes</strong><p>Usa a pontuação total integral das três maiores obras.</p></article></section><h2 class="section-title formula-section-title">Bases de pontuação</h2><section class="formula-grid"><article class="card formula"><span>Público</span><strong>${publicMult} × (nota Letterboxd − ${publicRef})</strong></article><article class="card formula"><span>Bilheteria</span><strong>${boxMult} × 2<sup>log10(global ÷ US$ 2 bi)</sup></strong></article><article class="card formula"><span>Crítica</span><strong>Metascore − 50,0</strong></article><article class="card formula"><span>Premiações</span><strong>Tabela de Prêmios</strong></article></section><section class="grid scoring-grid"><div><h2 class="section-title">Tabela de Prêmios</h2>${table(['Premiação','Categoria','Resultado','Filmes e distribuidoras','Atores','Diretores'],state.data.awardScoring.map(item=>[item.award,item.category,item.result,item.film,item.actor,item.director]))}</div></section>`; }
 function studioConfiguration() { return `<section class="configuration-section"><h2 class="section-title">Configuração</h2><div class="card studio-configuration"><div class="card-head"><div><h2>Estúdios</h2><span class="count">Os nomes atualizam todo o teste local.</span></div></div><div class="studio-config-grid">${state.data.teams.map((team,index)=>`<label>Estúdio ${index+1}<input class="studio-name-input" value="${team}" /></label>`).join('')}</div>${state.configError?`<p class="config-error">${state.configError}</p>`:''}<div class="actions studio-config-actions"><button class="button primary" data-save-studios>Salvar nomes</button></div></div></section>`; }
