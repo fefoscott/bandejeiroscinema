@@ -1,0 +1,161 @@
+<!--
+  Base da ficha de filme para integrar em Bandejeiros Cinema.
+  Não é uma página independente: cole o CSS em styles.css e as funções em app.js.
+  O posterUrl será preenchido futuramente pela coluna Poster URL da base.
+-->
+
+<!-- styles.css -->
+<style>
+.film-modal-backdrop {
+  position:fixed;
+  z-index:30;
+  inset:0;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  background:rgb(6 12 36 / 78%);
+  backdrop-filter:blur(3px);
+}
+.film-modal {
+  position:relative;
+  width:min(100%,460px);
+  max-height:calc(100dvh - 40px);
+  overflow:auto;
+  border:1px solid var(--color-border);
+  border-radius:var(--radius-card);
+  background:var(--color-surface);
+  box-shadow:0 24px 70px rgb(0 0 0 / 48%);
+}
+.film-modal-close {
+  position:absolute;
+  z-index:3;
+  top:10px;
+  right:14px;
+  padding:4px 8px;
+  border:0;
+  background:transparent;
+  color:var(--color-text-muted);
+  font:400 26px/1 var(--font-body);
+}
+.film-modal-close:hover { color:var(--color-text); }
+.film-modal-hero {
+  position:relative;
+  display:grid;
+  place-items:center;
+  min-height:298px;
+  padding:28px 24px;
+  overflow:hidden;
+  background:var(--color-surface-control);
+}
+.film-modal-hero::before {
+  content:"";
+  position:absolute;
+  inset:-30px;
+  background-image:var(--film-poster,none);
+  background-position:center;
+  background-size:cover;
+  filter:blur(28px) brightness(.55) saturate(1.15);
+  transform:scale(1.15);
+}
+.film-modal-poster {
+  position:relative;
+  z-index:1;
+  width:180px;
+  aspect-ratio:2 / 3;
+  overflow:hidden;
+  border:1px solid var(--color-border);
+  border-radius:10px;
+  background:var(--color-sidebar);
+}
+.film-modal-poster img { display:block; width:100%; height:100%; object-fit:cover; }
+.film-modal-poster--empty { display:grid; place-items:center; color:var(--color-text-muted); font-size:var(--fs-body-sm); }
+.film-modal-head { padding:18px 24px 0; text-align:center; }
+.film-modal-title { margin:0 0 5px; font:700 22px/1.18 var(--font-display); letter-spacing:-.035em; }
+.film-modal-meta { color:var(--color-text-muted); font-size:var(--fs-body); }
+.film-modal-meta .film-director { color:var(--color-director); }
+.film-modal-meta .film-distributor { color:var(--color-distributor); }
+.film-modal-actors { margin-top:8px; color:var(--color-actor); font-size:var(--fs-body); line-height:1.4; }
+.film-modal-studio { margin-top:13px; color:var(--color-text); font:600 var(--fs-title-sm)/1.25 var(--font-display); }
+.film-modal-stats {
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  margin-top:20px;
+  padding:20px 24px 24px;
+  text-align:center;
+}
+.film-modal-stat small { display:block; color:var(--color-text-muted); font-size:var(--fs-sm); font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.film-modal-stat strong { display:block; margin-top:4px; color:var(--color-text); font-size:var(--fs-title-sm); font-variant-numeric:tabular-nums; }
+.film-modal-stat--fpts strong { color:var(--color-gold); }
+@media (max-width:400px) {
+  .film-modal-poster { width:150px; }
+  .film-modal-title { font-size:19px; }
+  .film-modal-stats { grid-template-columns:repeat(2,minmax(0,1fr)); row-gap:14px; }
+}
+</style>
+
+<!-- app.js -->
+<script>
+function filmModalEscape(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' })[char]);
+}
+
+function openFilmModal(name) {
+  state.filmModal = name;
+  render();
+}
+
+function closeFilmModal() {
+  state.filmModal = null;
+  render();
+}
+
+function filmModal() {
+  const name=state.filmModal;
+  if (!name) return '';
+
+  const item=(state.data.pools.Filme || []).find(entry => entry.name===name);
+  if (!item) return '';
+
+  const metrics=film(name) || {};
+  const posterUrl=item.posterUrl || '';
+  const poster=posterUrl
+    ? `<img src="${filmModalEscape(posterUrl)}" alt="Pôster de ${filmModalEscape(item.name)}" />`
+    : '<div class="film-modal-poster--empty">Pôster em breve</div>';
+  const heroStyle=posterUrl ? ` style="--film-poster:url('${filmModalEscape(posterUrl)}')"` : '';
+
+  return `<div class="film-modal-backdrop" data-close-film-modal>
+    <section class="film-modal" role="dialog" aria-modal="true" aria-labelledby="film-modal-title">
+      <button class="film-modal-close" data-close-film-modal aria-label="Fechar ficha do filme">×</button>
+      <div class="film-modal-hero"${heroStyle}>
+        <div class="film-modal-poster">${poster}</div>
+      </div>
+      <div class="film-modal-head">
+        <h2 class="film-modal-title" id="film-modal-title">${filmModalEscape(item.name)}</h2>
+        <p class="film-modal-meta"><span class="film-director">${filmModalEscape(item.director || 'Direção em breve')}</span> · <span class="film-distributor">${filmModalEscape(item.distributor || 'Distribuidora em breve')}</span></p>
+        ${item.actors?.length ? `<p class="film-modal-actors">${item.actors.map(filmModalEscape).join(' · ')}</p>` : ''}
+        <p class="film-modal-studio">${filmModalEscape(owner('Filme',item.name))}</p>
+      </div>
+      <div class="film-modal-stats">
+        <div class="film-modal-stat film-modal-stat--fpts"><small>FPTS</small><strong>${fmt(item.score)}</strong></div>
+        <div class="film-modal-stat"><small>Bilheteria</small><strong>${usd(metrics.globalBoxOffice || 0)}</strong></div>
+        <div class="film-modal-stat"><small>Letterboxd</small><strong>${letterboxdFmt(metrics.letterboxd || 0)}</strong></div>
+        <div class="film-modal-stat"><small>Metascore</small><strong>${Math.round(metrics.metascore || 0)}</strong></div>
+      </div>
+    </section>
+  </div>`;
+}
+
+/* Na função render(), inclua filmModal() no final do conteúdo principal.
+   Depois, adicione estes eventos junto aos demais listeners:
+
+   root.querySelectorAll('[data-open-film-modal]').forEach(button => {
+     button.onclick=()=>openFilmModal(decodeURIComponent(button.dataset.openFilmModal));
+   });
+   root.querySelectorAll('[data-close-film-modal]').forEach(element => {
+     element.onclick=event=>{
+       if (event.target===element || element.matches('button')) closeFilmModal();
+     };
+   });
+*/
+</script>
