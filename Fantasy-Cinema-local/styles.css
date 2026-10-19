@@ -625,6 +625,12 @@ h2,.card h2 { font-size:17px; font-weight:700; line-height:1.25; letter-spacing:
 
 /* Datas de filmes já estreados ficam evidentes em Líderes. */
 .available-table .released-date { color:var(--color-danger-hover) !important; }
+.available-table .bid-deadline { display:grid; justify-items:center; gap:2px; color:#aebbd0; font-variant-numeric:tabular-nums; line-height:1.2; }
+.available-table .bid-deadline small { color:#71819c; font:500 10px/1.15 var(--font-body); white-space:nowrap; }
+.available-table .bid-deadline.is-past > span { color:var(--color-danger-hover); }
+.bid-schedule { display:flex; gap:8px; margin:14px 0 2px; }
+.bid-schedule span { flex:1; display:grid; gap:3px; padding:8px 9px; border-radius:7px; background:var(--color-sidebar); color:var(--muted); font:600 10px/1.2 var(--font-body); text-transform:uppercase; letter-spacing:.04em; }
+.bid-schedule b { color:#ffffff; font-size:12px; letter-spacing:0; text-transform:none; }
 
 /* Líderes: uma hierarquia compacta e única para toda a tabela. */
 .asset-table:not(.available-table) .table-wrap table { font-size:12px; }
