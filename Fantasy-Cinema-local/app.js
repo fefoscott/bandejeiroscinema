@@ -702,7 +702,16 @@ function bidDeadlineDate(value, processAt='') {
 }
 function bidDeadlineLabel(value, processAt='') { const date=bidDeadlineDate(value,processAt); return date ? date.toLocaleDateString('pt-BR',{timeZone:'UTC',day:'2-digit',month:'2-digit',year:'numeric'}) : '—'; }
 function bidDeadlinePassed(value, processAt='') { const parts=releaseDateParts(value); if (!parts) return true; const deadline=bidDeadlineDate(value,processAt); const endOfDeadline=new Date(`${deadline.getUTCFullYear()}-${String(deadline.getUTCMonth()+1).padStart(2,'0')}-${String(deadline.getUTCDate()).padStart(2,'0')}T23:59:59-03:00`); return endOfDeadline.getTime()<Date.now(); }
-function waiverReleaseFor(position, item) { return position==='Filme' ? item.releaseDate||'' : nextUpcomingRelease(position,item.name); }
+function waiverReleaseFor(position, item) {
+  if (position==='Filme') return item.releaseDate||'';
+  const films=position==='Distribuidora'
+    ? state.data.pools.Filme.filter(entry=>entry.distributor===item.name)
+    : relatedFilms(position,item.name);
+  const dated=films.filter(entry=>releaseDateParts(entry.releaseDate));
+  const upcoming=dated.filter(entry=>releaseIsFuture(entry.releaseDate)).sort((a,b)=>releaseSortValue(a.releaseDate)-releaseSortValue(b.releaseDate));
+  if (upcoming.length) return upcoming[0].releaseDate;
+  return dated.sort((a,b)=>releaseSortValue(b.releaseDate)-releaseSortValue(a.releaseDate))[0]?.releaseDate || '';
+}
 function canBidOnAsset(position, item) { const release=waiverReleaseFor(position,item); const listing=waiverListing(position,item.name); return isAvailable(position,item) && Boolean(release&&releaseIsFuture(release)) && !bidDeadlinePassed(release,listing?.processAt); }
 function waiverRoundKey(value) {
   const text=String(value||'').trim();
